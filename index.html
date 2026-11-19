@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ARKANA記録簿">
+  <meta name="theme-color" content="#0f172a">
+  <title>ARKANA 給油・整備記録簿</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* iPhone / iPad Safari 向けのフォント・タッチ操作最適化 */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+
+    /* タップ時の押し込みフィードバック */
+    .tap-btn:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+
+    /* 一覧表の縦・横スクロールコンテナ */
+    .table-scroll-wrap {
+      -webkit-overflow-scrolling: touch;
+      max-height: 62vh;
+      overflow: auto;
+    }
+
+    /* 一覧表の固定ヘッダー・固定列（給油日）の重なり制御 */
+    .sticky-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background-color: #1e293b;
+    }
+    .sticky-table thead th.sticky-col-date {
+      left: 0;
+      z-index: 30;
+    }
+    .sticky-table tbody td.sticky-col-date {
+      position: sticky;
+      left: 0;
+      z-index: 10;
+      background-color: #ffffff;
+    }
+    .sticky-table tbody tr:hover td.sticky-col-date {
+      background-color: #f8fafc;
+    }
+
+    /* スクロールバーの控えめなスタイリング */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.35);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- 上部ヘッダー & ナビゲーション（黄色いバッジなしのシンプル構成） -->
+  <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5">
+      <div class="flex items-center justify-between gap-3">
+        <!-- アプリタイトル -->
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-xl font-bold tracking-tight truncate">
+            <span id="headerTitleVehicle">ARKANA</span> 給油・整備記録簿
+          </h1>
+          <p class="text-[11px] text-slate-400 mt-0.5 truncate">iPhone / iPad ローカル保存（サーバー不要）</p>
+        </div>
+
+        <!-- 右上メニューボタン -->
+        <button
+          type="button"
+          id="openMenuBtn"
+          class="tap-btn shrink-0 inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold text-xs sm:text-sm border border-slate-700 transition cursor-pointer"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+          <span>メニュー</span>
+        </button>
+      </div>
+
+      <!-- 3タブ切替ナビゲーション（最新表示 / 一覧表示 / 記録を入力） -->
+      <div class="mt-3 grid grid-cols-3 gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700/70">
+        <button
+          type="button"
+          id="tabLatest"
+          class="tap-btn py-2 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition flex items-center justify-center space-x-1 bg-white text-slate-900 shadow-xs cursor-pointer"
+        >
+          <span>最新表示</span>
+        </button>
+        <button
+          type="button"
+          id="tabList"
+          class="tap-btn py-2 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition flex items-center justify-center space-x-1 text-slate-300 hover:text-white cursor-pointer"
+        >
+          <span>一覧表示</span>
+          <span id="headerCountBadge" class="text-[10px] sm:text-[11px] px-1.5 py-0.2 rounded-full bg-slate-700 text-slate-200">0</span>
+        </button>
+        <button
+          type="button"
+          id="tabInput"
+          class="tap-btn py-2 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition flex items-center justify-center space-x-1 text-slate-300 hover:text-white cursor-pointer"
+        >
+          <span>記録を入力</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- トースト通知エリア -->
+  <div id="toastBanner" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 hidden max-w-[90vw]">
+    <div id="toastContent" class="bg-slate-900 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-2xl shadow-xl border border-slate-700 text-center">
+      保存しました
+    </div>
+  </div>
+
+  <!-- メインコンテンツ領域 -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-6">
+
+    <!-- ① 最新表示ビュー -->
+    <section id="latestView" class="space-y-5">
+      <!-- 最新基準日バナー -->
+      <div class="flex flex-wrap items-center justify-between gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-2xs">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span class="text-xs sm:text-sm font-bold text-slate-700">最新記録基準日:</span>
+          <span id="latestDateText" class="text-xs sm:text-sm font-extrabold text-slate-900">-</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button
+            type="button"
+            id="editLatestBtn"
+            class="tap-btn text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 transition cursor-pointer"
+          >
+            最新記録を編集
+          </button>
+          <button
+            type="button"
+            id="jumpToListBtn"
+            class="tap-btn text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white transition cursor-pointer"
+          >
+            全一覧を見る →
+          </button>
+        </div>
+      </div>
+
+      <!-- 主役となる3つの重要指標（今回実燃費・直近3ヶ月平均実燃費・給油単価） -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- 今回実燃費 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-wider text-sky-600">Latest Fuel Economy</p>
+            <h2 class="text-sm font-bold text-slate-600 mt-0.5">今回実燃費</h2>
+          </div>
+          <div class="mt-4 flex items-baseline space-x-1.5">
+            <span id="kpiCurrentMpg" class="text-4xl sm:text-5xl font-black tracking-tight text-slate-900">-</span>
+            <span class="text-sm font-bold text-slate-500">km/L</span>
+          </div>
+          <p id="kpiCurrentSub" class="text-xs text-slate-500 mt-3">走行km ÷ 今回給油</p>
+        </div>
+
+        <!-- 直近3ヶ月平均実燃費 -->
+        <div class="bg-slate-900 text-white rounded-2xl p-5 border border-slate-800 shadow-sm flex flex-col justify-between">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-wider text-amber-400">3-Month Average</p>
+            <h2 class="text-sm font-bold text-slate-200 mt-0.5">直近3ヶ月平均実燃費</h2>
+          </div>
+          <div class="mt-4 flex items-baseline space-x-1.5">
+            <span id="kpiThreeMonthMpg" class="text-4xl sm:text-5xl font-black tracking-tight text-amber-400">-</span>
+            <span class="text-sm font-bold text-slate-300">km/L</span>
+          </div>
+          <p id="kpiThreeMonthSub" class="text-xs text-slate-400 mt-3">直近約3ヶ月間の走行距離 ÷ 給油量</p>
+        </div>
+
+        <!-- 給油単価 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-wider text-emerald-600">Unit Price</p>
+            <h2 class="text-sm font-bold text-slate-600 mt-0.5">給油単価</h2>
+          </div>
+          <div class="mt-4 flex items-baseline space-x-1.5">
+            <span id="kpiUnitPrice" class="text-4xl sm:text-5xl font-black tracking-tight text-slate-900">-</span>
+            <span class="text-sm font-bold text-slate-500">円/L</span>
+          </div>
+          <p id="kpiUnitPriceSub" class="text-xs text-slate-500 mt-3">給油金額 ÷ 今回給油</p>
+        </div>
+      </div>
+
+      <!-- 最新給油記録の詳細 & 全期間サマリー -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- 最新給油記録の詳細 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+          <h3 class="text-sm font-extrabold text-slate-900 pb-3 border-b border-slate-100">最新給油記録の詳細</h3>
+          <dl class="mt-3 grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+            <div>
+              <dt class="text-xs text-slate-500">給油日</dt>
+              <dd id="detailDate" class="font-bold text-slate-900 mt-0.5">-</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-slate-500">累計km（オドメーター）</dt>
+              <dd id="detailOdometer" class="font-bold text-slate-900 mt-0.5">-</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-slate-500">走行km</dt>
+              <dd id="detailTripKm" class="font-bold text-slate-900 mt-0.5">-</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-slate-500">今回給油</dt>
+              <dd id="detailFuel" class="font-bold text-slate-900 mt-0.5">-</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-slate-500">給油金額</dt>
+              <dd id="detailPrice" class="font-bold text-slate-900 mt-0.5">-</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-slate-500">累計給油 / 累計燃費</dt>
+              <dd id="detailCumulativeFuelMpg" class="font-bold text-slate-900 mt-0.5">-</dd>
+            </div>
+            <div class="col-span-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+              <span class="text-xs text-slate-500">累計金額（燃料代累計）</span>
+              <span id="detailCumulativePrice" class="font-extrabold text-slate-900">-</span>
+            </div>
+            <div class="col-span-2 pt-2 border-t border-slate-100">
+              <dt class="text-xs text-slate-500">メンテナンスMEMO・整備費用</dt>
+              <dd id="detailMemo" class="font-semibold text-slate-800 mt-1">-</dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- 全期間サマリー -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900 pb-3 border-b border-slate-100">全期間サマリー</h3>
+            <dl class="mt-3 grid grid-cols-2 gap-y-4 gap-x-4 text-sm">
+              <div>
+                <dt class="text-xs text-slate-500">最高燃費（今回燃費）</dt>
+                <dd id="summaryMaxMpg" class="text-lg font-extrabold text-emerald-600 mt-0.5">-</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-slate-500">最低燃費（今回燃費）</dt>
+                <dd id="summaryMinMpg" class="text-lg font-extrabold text-rose-600 mt-0.5">-</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-slate-500">累計走行距離</dt>
+                <dd id="summaryTotalDistance" class="text-base font-bold text-slate-900 mt-0.5">-</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-slate-500">整備費用合計</dt>
+                <dd id="summaryTotalMaintCost" class="text-base font-bold text-slate-900 mt-0.5">-</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-slate-500">累計給油量</dt>
+                <dd id="summaryTotalFuel" class="font-bold text-slate-900 mt-0.5">-</dd>
+              </div>
+              <div>
+                <dt class="text-xs text-slate-500">通算累計燃費</dt>
+                <dd id="summaryTotalMpg" class="font-bold text-slate-900 mt-0.5">-</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+            <span class="text-xs text-slate-500">燃料代・整備費用 総合計</span>
+            <span id="summaryGrandTotalCost" class="text-base font-black text-slate-900">-</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ② 一覧表示ビュー（ヘッダー固定縦スクロール・給油日列固定横スクロール） -->
+    <section id="listView" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div class="px-4 sm:px-6 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm sm:text-base font-extrabold text-slate-900">給油・整備記録一覧</h2>
+            <p class="text-[11px] text-slate-500">縦スクロール時もヘッダー行が固定され、データ行のみスクロールします</p>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <span id="listSummaryBadge" class="px-2.5 py-1 rounded-full bg-slate-200/80 text-slate-700 font-bold">0件</span>
+          </div>
+        </div>
+
+        <div class="table-scroll-wrap">
+          <table class="sticky-table min-w-[1260px] w-full text-left border-collapse text-xs sm:text-[13px]">
+            <thead>
+              <tr class="bg-slate-800 text-white font-bold shadow-xs">
+                <th class="sticky-col-date py-3 px-3 whitespace-nowrap border-r border-slate-700">給油日</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">累計km</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">今回給油</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">給油金額</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">走行km</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">今回燃費</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">3ヶ月燃費</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">累計給油</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">累計燃費</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">給油単価</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">累計金額</th>
+                <th class="py-3 px-3 min-w-[220px]">メンテナンスMEMO</th>
+                <th class="py-3 px-3 whitespace-nowrap text-right">整備費用</th>
+                <th class="py-3 px-3 whitespace-nowrap text-center">操作</th>
+              </tr>
+            </thead>
+            <tbody id="recordsTableBody" class="divide-y divide-slate-200 bg-white">
+              <!-- JavaScriptで描画 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ③ 記録を入力ビュー（新規入力＆給油日選択による既存記録の修正） -->
+    <section id="inputView" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-4 sm:px-6 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <h2 id="formModeTitle" class="text-sm sm:text-base font-extrabold text-slate-900">新規記録の入力</h2>
+          <span id="editingBadge" class="hidden text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">修正モード</span>
+        </div>
+        <button
+          type="button"
+          id="switchToNewBtn"
+          class="hidden tap-btn text-xs font-bold text-slate-700 hover:text-slate-950 px-3 py-1.5 rounded-lg bg-white border border-slate-300 shadow-2xs transition cursor-pointer"
+        >
+          ＋ 新規入力に戻る
+        </button>
+      </div>
+
+      <form id="recordForm" class="p-4 sm:p-6 space-y-5">
+        <input type="hidden" id="editRecordId" value="">
+
+        <!-- 過去の記録を修正（給油日を選択） -->
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+          <label for="selectEditDate" class="block text-xs font-extrabold text-slate-800">
+            過去の記録を修正（給油日を選択）
+          </label>
+          <select
+            id="selectEditDate"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-900"
+          >
+            <option value="">＋ 新規記録として入力</option>
+          </select>
+          <p class="text-[11px] text-slate-500">
+            修正したい給油日を選択すると当時の数値が読み込まれ、上書き更新や削除が行えます。
+          </p>
+        </div>
+
+        <!-- 4つの数値・日付入力項目 -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- 給油日 -->
+          <div>
+            <label for="inputDate" class="block text-xs font-bold text-slate-700 mb-1.5">
+              給油日 <span class="text-rose-600">*</span>
+            </label>
+            <input
+              type="date"
+              id="inputDate"
+              required
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+          </div>
+
+          <!-- オドメーター値 (km) -->
+          <div>
+            <label for="inputOdometer" class="block text-xs font-bold text-slate-700 mb-1.5">
+              オドメーター値 (km) <span class="text-rose-600">*</span>
+            </label>
+            <input
+              type="number"
+              id="inputOdometer"
+              step="0.1"
+              min="0"
+              placeholder="例: 25845.0"
+              required
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+          </div>
+
+          <!-- 今回給油量 (L) -->
+          <div>
+            <label for="inputFuel" class="block text-xs font-bold text-slate-700 mb-1.5">
+              今回給油量 (L) <span class="text-rose-600">*</span>
+            </label>
+            <input
+              type="number"
+              id="inputFuel"
+              step="0.1"
+              min="0.1"
+              placeholder="例: 28.0"
+              required
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+          </div>
+
+          <!-- 給油金額 (円) -->
+          <div>
+            <label for="inputPrice" class="block text-xs font-bold text-slate-700 mb-1.5">
+              給油金額 (円) <span class="text-rose-600">*</span>
+            </label>
+            <input
+              type="number"
+              id="inputPrice"
+              step="1"
+              min="0"
+              placeholder="例: 4706"
+              required
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+          </div>
+        </div>
+
+        <!-- メンテナンスMEMO・整備費用 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="lg:col-span-2">
+            <label for="inputMemo" class="block text-xs font-bold text-slate-700 mb-1.5">
+              メンテナンスMEMO
+            </label>
+            <input
+              type="text"
+              id="inputMemo"
+              placeholder="例: 1年点検、オイル、エレメント、ボディダンパー"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+          </div>
+
+          <div>
+            <label for="inputMaintCost" class="block text-xs font-bold text-slate-700 mb-1.5">
+              整備費用 (円)
+            </label>
+            <input
+              type="number"
+              id="inputMaintCost"
+              step="1"
+              min="0"
+              placeholder="例: 191000"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+          </div>
+        </div>
+
+        <!-- リアルタイム計算プレビュー -->
+        <div class="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+          <span>※ 保存時に日付順で自動整列し、走行km・今回燃費・3ヶ月燃費・累計値・単価を全件再計算します。</span>
+          <span id="liveUnitPricePreview" class="font-bold text-slate-800">推定給油単価: - 円/L</span>
+        </div>
+
+        <!-- フォーム操作ボタン -->
+        <div class="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+          <div>
+            <button
+              type="button"
+              id="deleteEditingRecordBtn"
+              class="hidden tap-btn px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-sm transition cursor-pointer"
+            >
+              この記録を削除
+            </button>
+          </div>
+          <div class="flex items-center gap-2.5 ml-auto">
+            <button
+              type="button"
+              id="cancelEditBtn"
+              class="tap-btn px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-100 transition cursor-pointer"
+            >
+              リセット
+            </button>
+            <button
+              type="submit"
+              id="submitRecordBtn"
+              class="tap-btn px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-xs transition cursor-pointer"
+            >
+              本体に保存する
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+  <!-- フッター -->
+  <footer class="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-500">
+    <p><span id="footerVehicleName">ARKANA</span> 給油・整備記録簿 — データはお使いの端末内（localStorage）に保存されます</p>
+  </footer>
+
+  <!-- メニューモーダル（車両名称設定・CSVエクスポート・初期データ復元・アンインストール） -->
+  <div id="menuModal" class="fixed inset-0 z-40 hidden bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+        <h2 class="text-base font-extrabold text-slate-900">メニュー設定</h2>
+        <button
+          type="button"
+          id="closeMenuBtn"
+          class="text-xs font-bold text-slate-500 hover:text-slate-900 px-2.5 py-1 rounded-lg hover:bg-slate-200/70 cursor-pointer"
+        >
+          閉じる
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 overflow-y-auto">
+        <!-- 車両・アプリ名称の設定 -->
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+          <div>
+            <label for="vehicleNameInput" class="block text-sm font-extrabold text-slate-900">車両・アプリ名称の設定</label>
+            <p class="text-xs text-slate-500 mt-0.5">全角・半角・記号・絵文字などすべての文字を入力できます</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              type="text"
+              id="vehicleNameInput"
+              placeholder="例: ARKANA / 愛車メモ 🚗"
+              class="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-900 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-slate-900"
+            >
+            <button
+              type="button"
+              id="saveVehicleNameBtn"
+              class="tap-btn shrink-0 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-extrabold cursor-pointer"
+            >
+              保存
+            </button>
+          </div>
+        </div>
+
+        <!-- CSVエクスポート -->
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-bold text-slate-900">CSVエクスポート</p>
+            <p class="text-xs text-slate-500 mt-0.5">一覧データをUTF-8（BOM付き）CSVでダウンロード</p>
+          </div>
+          <button
+            type="button"
+            id="exportCsvBtn"
+            class="tap-btn shrink-0 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer"
+          >
+            出力
+          </button>
+        </div>
+
+        <!-- 初期サンプルデータの復元 -->
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-bold text-slate-900">初期サンプルデータの復元</p>
+            <p class="text-xs text-slate-500 mt-0.5">ARKANAの初期サンプルデータに戻します</p>
+          </div>
+          <button
+            type="button"
+            id="resetSampleBtn"
+            class="tap-btn shrink-0 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold cursor-pointer"
+          >
+            復元
+          </button>
+        </div>
+
+        <!-- アンインストール（データ・キャッシュ完全消去） -->
+        <div class="p-4 rounded-2xl bg-rose-50/80 border border-rose-200 space-y-2.5">
+          <div class="flex items-center space-x-2">
+            <span class="inline-block w-2 h-2 rounded-full bg-rose-600"></span>
+            <p class="text-sm font-extrabold text-rose-900">アンインストール（データ・キャッシュ完全消去）</p>
+          </div>
+          <p class="text-xs text-rose-800/90 leading-relaxed">
+            localStorage、sessionStorage、Cache Storage、Service Workerを完全に消去します。実行後、ホーム画面に追加したアイコンを削除してください。
+          </p>
+          <button
+            type="button"
+            id="uninstallBtn"
+            class="tap-btn w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-xs transition cursor-pointer"
+          >
+            アンインストール（データ・キャッシュ完全消去）
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- カスタム確認モーダル -->
+  <div id="confirmModal" class="fixed inset-0 z-50 hidden bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-200 p-5 space-y-4">
+      <h3 id="confirmTitle" class="text-base font-extrabold text-slate-900">確認</h3>
+      <p id="confirmMessage" class="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line"></p>
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button
+          type="button"
+          id="confirmCancelBtn"
+          class="tap-btn px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-bold hover:bg-slate-100 cursor-pointer"
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          id="confirmOkBtn"
+          class="tap-btn px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-bold cursor-pointer"
+        >
+          実行する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 定数・ストレージキー定義
+    // =========================================================================
+    const STORAGE_KEY = 'arkana_fuel_maintenance_log_v1';
+    const VEHICLE_NAME_KEY = 'arkana_custom_vehicle_name_v1';
+    const DEFAULT_VEHICLE_NAME = 'ARKANA';
+
+    // PDFのARKANA給油・整備記録データ（2022/10/13〜2026/10/31）
+    const INITIAL_RECORDS = [
+      { id: 'rec-01', date: '2022-10-13', odometer: 49.0, fuel: 36.8, price: 5966, memo: '納車後給油', maintCost: 0 },
+      { id: 'rec-02', date: '2022-11-02', odometer: 539.0, fuel: 27.3, price: 4418, memo: '前回満タンになっていなかった模様', maintCost: 0 },
+      { id: 'rec-03', date: '2022-12-02', odometer: 1103.0, fuel: 26.2, price: 4326, memo: '', maintCost: 0 },
+      { id: 'rec-04', date: '2022-12-30', odometer: 1708.0, fuel: 27.0, price: 4131, memo: '', maintCost: 0 },
+      { id: 'rec-05', date: '2023-01-31', odometer: 2120.0, fuel: 20.8, price: 3437, memo: '', maintCost: 0 },
+      { id: 'rec-06', date: '2023-03-01', odometer: 2517.0, fuel: 18.7, price: 3157, memo: 'タイヤ交換(ヤフオク購入、ディーラー入れ替え)', maintCost: 60000 },
+      { id: 'rec-07', date: '2023-03-31', odometer: 3104.0, fuel: 28.2, price: 4479, memo: '', maintCost: 0 },
+      { id: 'rec-08', date: '2023-05-01', odometer: 3656.0, fuel: 29.5, price: 4722, memo: '', maintCost: 0 },
+      { id: 'rec-09', date: '2023-05-31', odometer: 4318.0, fuel: 30.8, price: 4922, memo: '', maintCost: 0 },
+      { id: 'rec-10', date: '2023-07-03', odometer: 4805.0, fuel: 18.2, price: 3034, memo: '', maintCost: 0 },
+      { id: 'rec-11', date: '2023-08-02', odometer: 5175.0, fuel: 16.2, price: 2941, memo: '', maintCost: 0 },
+      { id: 'rec-12', date: '2023-09-01', odometer: 5575.0, fuel: 21.2, price: 3991, memo: '', maintCost: 0 },
+      { id: 'rec-13', date: '2023-09-30', odometer: 5919.0, fuel: 17.7, price: 3276, memo: '1年点検 (エアコンフィルター交換)', maintCost: 44000 },
+      { id: 'rec-14', date: '2023-11-01', odometer: 6433.0, fuel: 21.9, price: 3718, memo: '', maintCost: 0 },
+      { id: 'rec-15', date: '2023-12-01', odometer: 6834.0, fuel: 22.5, price: 3974, memo: '', maintCost: 0 },
+      { id: 'rec-16', date: '2023-12-30', odometer: 7475.0, fuel: 25.1, price: 4509, memo: '', maintCost: 0 },
+      { id: 'rec-17', date: '2024-02-01', odometer: 8119.0, fuel: 34.2, price: 6052, memo: '', maintCost: 0 },
+      { id: 'rec-18', date: '2024-03-03', odometer: 8645.0, fuel: 29.9, price: 5312, memo: '1週間ピットイン、コントロールプログラム入替', maintCost: 0 },
+      { id: 'rec-19', date: '2024-04-01', odometer: 9145.0, fuel: 20.7, price: 3730, memo: '', maintCost: 0 },
+      { id: 'rec-20', date: '2024-05-02', odometer: 9811.0, fuel: 33.0, price: 5671, memo: '', maintCost: 0 },
+      { id: 'rec-21', date: '2024-06-01', odometer: 10342.0, fuel: 17.5, price: 2963, memo: '', maintCost: 0 },
+      { id: 'rec-22', date: '2024-07-01', odometer: 11098.0, fuel: 39.8, price: 6972, memo: '', maintCost: 0 },
+      { id: 'rec-23', date: '2024-08-01', odometer: 11727.0, fuel: 29.1, price: 5115, memo: '', maintCost: 0 },
+      { id: 'rec-24', date: '2024-09-02', odometer: 12126.0, fuel: 20.1, price: 3640, memo: '', maintCost: 0 },
+      { id: 'rec-25', date: '2024-10-01', odometer: 12666.0, fuel: 25.9, price: 4540, memo: '1年点検', maintCost: 36000 },
+      { id: 'rec-26', date: '2024-10-31', odometer: 13222.0, fuel: 27.0, price: 4779, memo: '', maintCost: 0 },
+      { id: 'rec-27', date: '2024-12-01', odometer: 13808.0, fuel: 23.5, price: 4151, memo: '', maintCost: 0 },
+      { id: 'rec-28', date: '2024-12-30', odometer: 14345.0, fuel: 24.2, price: 4576, memo: '', maintCost: 0 },
+      { id: 'rec-29', date: '2025-02-01', odometer: 14836.0, fuel: 26.3, price: 4781, memo: '', maintCost: 0 },
+      { id: 'rec-30', date: '2025-03-01', odometer: 15359.0, fuel: 25.7, price: 4499, memo: '', maintCost: 0 },
+      { id: 'rec-31', date: '2025-04-01', odometer: 15913.0, fuel: 25.6, price: 4531, memo: '', maintCost: 0 },
+      { id: 'rec-32', date: '2025-05-01', odometer: 16529.0, fuel: 26.1, price: 4754, memo: '', maintCost: 0 },
+      { id: 'rec-33', date: '2025-06-01', odometer: 17160.0, fuel: 29.1, price: 4932, memo: '', maintCost: 0 },
+      { id: 'rec-34', date: '2025-07-01', odometer: 17688.0, fuel: 24.4, price: 4315, memo: 'ワイパー交換 (Amazon購入) / リモコン電池交換 (二つとも)', maintCost: 4200 },
+      { id: 'rec-35', date: '2025-08-01', odometer: 18135.0, fuel: 22.0, price: 3715, memo: '', maintCost: 0 },
+      { id: 'rec-36', date: '2025-09-01', odometer: 18586.0, fuel: 22.8, price: 4155, memo: 'ユーザー車検', maintCost: 44550 },
+      { id: 'rec-37', date: '2025-10-01', odometer: 19096.0, fuel: 22.3, price: 3789, memo: 'エアコンフィルタ交換 (amazon購入)', maintCost: 2400 },
+      { id: 'rec-38', date: '2025-11-01', odometer: 19501.0, fuel: 18.1, price: 3166, memo: '一年点検 (ブレーキオイル交換、その他3年目につき)', maintCost: 52679 },
+      { id: 'rec-39', date: '2025-12-01', odometer: 20183.0, fuel: 28.9, price: 4855, memo: '', maintCost: 0 },
+      { id: 'rec-40', date: '2026-01-02', odometer: 20762.0, fuel: 24.1, price: 3838, memo: '', maintCost: 0 },
+      { id: 'rec-41', date: '2026-02-02', odometer: 21302.0, fuel: 21.1, price: 3191, memo: '', maintCost: 0 },
+      { id: 'rec-42', date: '2026-03-01', odometer: 21595.0, fuel: 17.0, price: 2671, memo: '', maintCost: 0 },
+      { id: 'rec-43', date: '2026-03-29', odometer: 22105.0, fuel: 29.1, price: 4887, memo: '', maintCost: 0 },
+      { id: 'rec-44', date: '2026-05-02', odometer: 22637.0, fuel: 18.8, price: 3199, memo: '', maintCost: 0 },
+      { id: 'rec-45', date: '2026-06-03', odometer: 23155.0, fuel: 21.6, price: 3672, memo: '', maintCost: 0 },
+      { id: 'rec-46', date: '2026-07-02', odometer: 23649.0, fuel: 20.8, price: 3467, memo: '', maintCost: 0 },
+      { id: 'rec-47', date: '2026-08-01', odometer: 24241.0, fuel: 27.6, price: 4656, memo: '', maintCost: 0 },
+      { id: 'rec-48', date: '2026-09-01', odometer: 24747.0, fuel: 33.2, price: 5705, memo: '12Vバッテリー交換 バッテリー22,000、工賃5,500', maintCost: 27500 },
+      { id: 'rec-49', date: '2026-10-01', odometer: 25262.0, fuel: 20.9, price: 3510, memo: '', maintCost: 0 },
+      { id: 'rec-50', date: '2026-10-31', odometer: 25845.0, fuel: 28.0, price: 4706, memo: '1年点検、オイル、エレメント、ボディダンパー', maintCost: 191000 }
+    ];
+
+    // アプリ状態
+    let state = {
+      activeTab: 'latest', // 'latest' | 'list' | 'input'
+      vehicleName: DEFAULT_VEHICLE_NAME,
+      records: []
+    };
+
+    // =========================================================================
+    // 初期化 & ストレージ操作
+    // =========================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      loadVehicleName();
+      loadRecords();
+      setDefaultFormDate();
+      bindEvents();
+      renderAll();
+    });
+
+    function loadVehicleName() {
+      try {
+        const saved = localStorage.getItem(VEHICLE_NAME_KEY);
+        if (saved !== null && saved.trim() !== '') {
+          state.vehicleName = saved;
+        } else {
+          state.vehicleName = DEFAULT_VEHICLE_NAME;
+        }
+      } catch (err) {
+        console.error('Failed to load vehicle name:', err);
+        state.vehicleName = DEFAULT_VEHICLE_NAME;
+      }
+      applyVehicleNameUI();
+    }
+
+    function saveVehicleName(newName) {
+      const normalized = newName.trim() !== '' ? newName : DEFAULT_VEHICLE_NAME;
+      state.vehicleName = normalized;
+      try {
+        localStorage.setItem(VEHICLE_NAME_KEY, normalized);
+      } catch (err) {
+        console.error('Failed to save vehicle name:', err);
+      }
+      applyVehicleNameUI();
+    }
+
+    function applyVehicleNameUI() {
+      const displayName = state.vehicleName || DEFAULT_VEHICLE_NAME;
+      const fullTitle = `${displayName} 給油・整備記録簿`;
+      document.title = fullTitle;
+      document.getElementById('headerTitleVehicle').textContent = displayName;
+      document.getElementById('footerVehicleName').textContent = displayName;
+
+      const metaAppleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+      if (metaAppleTitle) {
+        metaAppleTitle.setAttribute('content', `${displayName}記録簿`);
+      }
+
+      const nameInput = document.getElementById('vehicleNameInput');
+      if (nameInput) {
+        nameInput.value = displayName;
+      }
+    }
+
+    function loadRecords() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw === null) {
+          state.records = [...INITIAL_RECORDS];
+          saveRecords();
+        } else {
+          const parsed = JSON.parse(raw);
+          state.records = Array.isArray(parsed) ? parsed : [];
+        }
+      } catch (err) {
+        console.error('Failed to load records:', err);
+        state.records = [...INITIAL_RECORDS];
+      }
+    }
+
+    function saveRecords() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records));
+      } catch (err) {
+        console.error('Failed to save records:', err);
+        showToast('端末の保存容量エラーが発生しました');
+      }
+    }
+
+    function setDefaultFormDate() {
+      const dateInput = document.getElementById('inputDate');
+      if (!dateInput.value) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        dateInput.value = `${yyyy}-${mm}-${dd}`;
+      }
+    }
+
+    // =========================================================================
+    // 燃費・累計・単価の自動計算ロジック
+    // =========================================================================
+    function computeCalculatedRecords(rawRecords) {
+      // 日付昇順、同日ならオドメーター昇順で整列
+      const sorted = [...rawRecords].sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return Number(a.odometer) - Number(b.odometer);
+      });
+
+      const initialOdo = sorted.length > 0 ? Number(sorted[0].odometer) : 0;
+      let cumulativeFuel = 0;
+      let cumulativePrice = 0;
+      let totalMaintCost = 0;
+      let maxMpg = null;
+      let minMpg = null;
+
+      const computed = sorted.map((rec, idx) => {
+        const odo = Number(rec.odometer) || 0;
+        const fuel = Number(rec.fuel) || 0;
+        const price = Number(rec.price) || 0;
+        const maintCost = Number(rec.maintCost) || 0;
+
+        const prevOdo = idx > 0 ? Number(sorted[idx - 1].odometer) : null;
+        const tripKm = prevOdo !== null ? Math.max(0, round1(odo - prevOdo)) : null;
+
+        // 今回燃費（走行km / 今回給油）
+        const currentMpg = (tripKm !== null && fuel > 0 && idx > 0)
+          ? round1(tripKm / fuel)
+          : null;
+
+        // 直近約3ヶ月（92日以内）の走行距離と給油量から3ヶ月燃費を算出
+        const currentDateMs = parseDateMs(rec.date);
+        const windowMs = 92 * 24 * 60 * 60 * 1000;
+        let windowTripKm = 0;
+        let windowFuel = 0;
+
+        for (let j = 0; j <= idx; j++) {
+          const candidate = sorted[j];
+          const candMs = parseDateMs(candidate.date);
+          if (currentDateMs - candMs <= windowMs && j > 0) {
+            const cPrevOdo = Number(sorted[j - 1].odometer);
+            const cTrip = Math.max(0, Number(candidate.odometer) - cPrevOdo);
+            windowTripKm += cTrip;
+            windowFuel += Number(candidate.fuel) || 0;
+          }
+        }
+        const threeMonthMpg = (windowFuel > 0 && idx >= 1)
+          ? round1(windowTripKm / windowFuel)
+          : null;
+
+        // 累計給油・累計燃費・給油単価・累計金額・整備費用累計
+        cumulativeFuel = round1(cumulativeFuel + fuel);
+        cumulativePrice = Math.round(cumulativePrice + price);
+        totalMaintCost = Math.round(totalMaintCost + maintCost);
+
+        const totalDist = Math.max(0, round1(odo - initialOdo));
+        const cumulativeMpg = (cumulativeFuel > 0 && idx > 0)
+          ? round1(totalDist / cumulativeFuel)
+          : null;
+
+        const unitPrice = fuel > 0 ? Math.round(price / fuel) : 0;
+
+        // 最高燃費・最低燃費の更新（idx > 0 の有効な今回燃費対象）
+        if (currentMpg !== null && currentMpg > 0) {
+          if (maxMpg === null || currentMpg > maxMpg) maxMpg = currentMpg;
+          if (minMpg === null || currentMpg < minMpg) minMpg = currentMpg;
+        }
+
+        return {
+          ...rec,
+          odometer: odo,
+          fuel,
+          price,
+          maintCost,
+          tripKm,
+          currentMpg,
+          threeMonthMpg,
+          cumulativeFuel,
+          cumulativeMpg,
+          unitPrice,
+          cumulativePrice
+        };
+      });
+
+      const totalDistance = sorted.length > 1
+        ? Math.max(0, round1(Number(sorted[sorted.length - 1].odometer) - initialOdo))
+        : 0;
+
+      return {
+        rows: computed,
+        maxMpg,
+        minMpg,
+        totalDistance,
+        totalMaintCost
+      };
+    }
+
+    function parseDateMs(dateStr) {
+      const parts = String(dateStr).split('-');
+      if (parts.length === 3) {
+        return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+      }
+      return new Date(dateStr).getTime() || 0;
+    }
+
+    function round1(num) {
+      return Math.round(num * 10) / 10;
+    }
+
+    function fmt1(val) {
+      return (val === null || val === undefined || Number.isNaN(val)) ? '-' : Number(val).toFixed(1);
+    }
+
+    // =========================================================================
+    // 画面描画（最新表示 / 一覧表示 / 記録を入力）
+    // =========================================================================
+    function renderAll() {
+      const { rows, maxMpg, minMpg, totalDistance, totalMaintCost } = computeCalculatedRecords(state.records);
+
+      // 件数バッジ更新
+      document.getElementById('headerCountBadge').textContent = String(rows.length);
+      document.getElementById('listSummaryBadge').textContent = `${rows.length}件`;
+
+      // タブ表示状態
+      const activeTab = state.activeTab;
+      document.getElementById('latestView').classList.toggle('hidden', activeTab !== 'latest');
+      document.getElementById('listView').classList.toggle('hidden', activeTab !== 'list');
+      document.getElementById('inputView').classList.toggle('hidden', activeTab !== 'input');
+
+      const tabConfigs = [
+        { id: 'tabLatest', key: 'latest' },
+        { id: 'tabList', key: 'list' },
+        { id: 'tabInput', key: 'input' }
+      ];
+
+      tabConfigs.forEach(({ id, key }) => {
+        const el = document.getElementById(id);
+        if (activeTab === key) {
+          el.className = 'tap-btn py-2 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition flex items-center justify-center space-x-1 bg-white text-slate-900 shadow-xs cursor-pointer';
+        } else {
+          el.className = 'tap-btn py-2 px-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold transition flex items-center justify-center space-x-1 text-slate-300 hover:text-white cursor-pointer';
+        }
+      });
+
+      renderLatestView(rows, maxMpg, minMpg, totalDistance, totalMaintCost);
+      renderListView(rows);
+      renderEditDateSelector(rows);
+    }
+
+    function renderEditDateSelector(rows) {
+      const select = document.getElementById('selectEditDate');
+      if (!select) return;
+      const currentEditId = document.getElementById('editRecordId').value;
+
+      select.innerHTML = '<option value="">＋ 新規記録として入力</option>';
+      [...rows].reverse().forEach((r) => {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = `${r.date.replace(/-/g, '/')}（${fmt1(r.odometer)} km / ${fmt1(r.fuel)} L）`;
+        select.appendChild(opt);
+      });
+
+      select.value = currentEditId || '';
+    }
+
+    function renderLatestView(rows, maxMpg, minMpg, totalDistance, totalMaintCost) {
+      if (rows.length === 0) {
+        document.getElementById('latestDateText').textContent = 'データなし';
+        document.getElementById('kpiCurrentMpg').textContent = '-';
+        document.getElementById('kpiThreeMonthMpg').textContent = '-';
+        document.getElementById('kpiUnitPrice').textContent = '-';
+        document.getElementById('detailDate').textContent = '-';
+        document.getElementById('detailOdometer').textContent = '-';
+        document.getElementById('detailTripKm').textContent = '-';
+        document.getElementById('detailFuel').textContent = '-';
+        document.getElementById('detailPrice').textContent = '-';
+        document.getElementById('detailCumulativeFuelMpg').textContent = '-';
+        document.getElementById('detailCumulativePrice').textContent = '-';
+        document.getElementById('detailMemo').textContent = '-';
+        document.getElementById('summaryMaxMpg').textContent = '-';
+        document.getElementById('summaryMinMpg').textContent = '-';
+        document.getElementById('summaryTotalDistance').textContent = '-';
+        document.getElementById('summaryTotalMaintCost').textContent = '-';
+        document.getElementById('summaryTotalFuel').textContent = '-';
+        document.getElementById('summaryTotalMpg').textContent = '-';
+        document.getElementById('summaryGrandTotalCost').textContent = '-';
+        return;
+      }
+
+      const latest = rows[rows.length - 1];
+      const formattedDate = latest.date.replace(/-/g, '/');
+
+      document.getElementById('latestDateText').textContent = formattedDate;
+      document.getElementById('kpiCurrentMpg').textContent = fmt1(latest.currentMpg);
+      document.getElementById('kpiThreeMonthMpg').textContent = fmt1(latest.threeMonthMpg);
+      document.getElementById('kpiUnitPrice').textContent = latest.unitPrice ? latest.unitPrice.toLocaleString() : '-';
+
+      document.getElementById('kpiCurrentSub').textContent =
+        latest.tripKm !== null ? `走行 ${fmt1(latest.tripKm)} km ÷ 給油 ${fmt1(latest.fuel)} L` : '初回記録のため算出対象外';
+      document.getElementById('kpiThreeMonthSub').textContent =
+        latest.threeMonthMpg !== null ? `${formattedDate} から直近約3ヶ月間の実績` : '直近3ヶ月の実績集計中';
+      document.getElementById('kpiUnitPriceSub').textContent =
+        `給油金額 ${latest.price.toLocaleString()} 円 ÷ ${fmt1(latest.fuel)} L`;
+
+      document.getElementById('detailDate').textContent = formattedDate;
+      document.getElementById('detailOdometer').textContent = `${fmt1(latest.odometer)} km`;
+      document.getElementById('detailTripKm').textContent = latest.tripKm !== null ? `${fmt1(latest.tripKm)} km` : '-';
+      document.getElementById('detailFuel').textContent = `${fmt1(latest.fuel)} L`;
+      document.getElementById('detailPrice').textContent = `${latest.price.toLocaleString()} 円`;
+      document.getElementById('detailCumulativeFuelMpg').textContent =
+        `${fmt1(latest.cumulativeFuel)} L / ${latest.cumulativeMpg !== null ? fmt1(latest.cumulativeMpg) + ' km/L' : '-'}`;
+      document.getElementById('detailCumulativePrice').textContent = `${latest.cumulativePrice.toLocaleString()} 円`;
+
+      const memoParts = [];
+      if (latest.memo && latest.memo.trim() !== '') memoParts.push(latest.memo.trim());
+      if (latest.maintCost > 0) memoParts.push(`整備費用: ${latest.maintCost.toLocaleString()} 円`);
+      document.getElementById('detailMemo').textContent = memoParts.length > 0 ? memoParts.join(' / ') : '（記載なし）';
+
+      document.getElementById('summaryMaxMpg').textContent = maxMpg !== null ? `${fmt1(maxMpg)} km/L` : '-';
+      document.getElementById('summaryMinMpg').textContent = minMpg !== null ? `${fmt1(minMpg)} km/L` : '-';
+      document.getElementById('summaryTotalDistance').textContent = `${fmt1(totalDistance)} km`;
+      document.getElementById('summaryTotalMaintCost').textContent = `${totalMaintCost.toLocaleString()} 円`;
+      document.getElementById('summaryTotalFuel').textContent = `${fmt1(latest.cumulativeFuel)} L`;
+      document.getElementById('summaryTotalMpg').textContent = latest.cumulativeMpg !== null ? `${fmt1(latest.cumulativeMpg)} km/L` : '-';
+      document.getElementById('summaryGrandTotalCost').textContent = `${(latest.cumulativePrice + totalMaintCost).toLocaleString()} 円`;
+    }
+
+    function renderListView(rows) {
+      const tbody = document.getElementById('recordsTableBody');
+      tbody.innerHTML = '';
+
+      if (rows.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="14" class="py-10 text-center text-slate-400 font-medium">
+              記録がありません。「記録を入力」タブから最初のデータを追加してください。
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50/90 transition';
+        tr.innerHTML = `
+          <td class="sticky-col-date py-2.5 px-3 whitespace-nowrap font-semibold text-slate-900 border-r border-slate-200">${escapeHtml(row.date.replace(/-/g, '/'))}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums">${fmt1(row.odometer)}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums">${fmt1(row.fuel)}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums">${row.price.toLocaleString()}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums">${row.tripKm !== null ? fmt1(row.tripKm) : ''}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums font-bold text-sky-700">${row.currentMpg !== null ? fmt1(row.currentMpg) : ''}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums font-bold text-amber-700">${row.threeMonthMpg !== null ? fmt1(row.threeMonthMpg) : ''}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums">${fmt1(row.cumulativeFuel)}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums">${row.cumulativeMpg !== null ? fmt1(row.cumulativeMpg) : ''}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums">${row.unitPrice ? row.unitPrice.toLocaleString() : ''}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums font-semibold">${row.cumulativePrice.toLocaleString()}</td>
+          <td class="py-2.5 px-3 text-slate-700">${escapeHtml(row.memo || '')}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-right tabular-nums text-slate-800">${row.maintCost > 0 ? row.maintCost.toLocaleString() : ''}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap text-center">
+            <div class="inline-flex items-center space-x-1.5">
+              <button
+                type="button"
+                onclick="startEditRecord('${escapeHtml(row.id)}')"
+                class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer"
+              >
+                編集
+              </button>
+              <button
+                type="button"
+                onclick="requestDeleteRecord('${escapeHtml(row.id)}')"
+                class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold cursor-pointer"
+              >
+                削除
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // =========================================================================
+    // フォーム操作（追加・編集・削除）
+    // =========================================================================
+    function bindEvents() {
+      document.getElementById('tabLatest').addEventListener('click', () => {
+        state.activeTab = 'latest';
+        renderAll();
+      });
+
+      document.getElementById('tabList').addEventListener('click', () => {
+        state.activeTab = 'list';
+        renderAll();
+      });
+
+      document.getElementById('tabInput').addEventListener('click', () => {
+        state.activeTab = 'input';
+        if (!document.getElementById('editRecordId').value) {
+          prepareNewForm();
+        }
+        renderAll();
+      });
+
+      document.getElementById('jumpToListBtn').addEventListener('click', () => {
+        state.activeTab = 'list';
+        renderAll();
+      });
+
+      document.getElementById('editLatestBtn').addEventListener('click', () => {
+        const { rows } = computeCalculatedRecords(state.records);
+        if (rows.length > 0) {
+          window.startEditRecord(rows[rows.length - 1].id);
+        } else {
+          state.activeTab = 'input';
+          prepareNewForm();
+          renderAll();
+        }
+      });
+
+      document.getElementById('cancelEditBtn').addEventListener('click', () => {
+        prepareNewForm();
+      });
+
+      // 給油日プルダウンから既存データの呼び出し・新規切替
+      document.getElementById('selectEditDate').addEventListener('change', (e) => {
+        const selectedId = e.target.value;
+        if (!selectedId) {
+          prepareNewForm();
+        } else {
+          window.startEditRecord(selectedId);
+        }
+      });
+
+      document.getElementById('switchToNewBtn').addEventListener('click', () => {
+        prepareNewForm();
+      });
+
+      document.getElementById('deleteEditingRecordBtn').addEventListener('click', () => {
+        const editId = document.getElementById('editRecordId').value;
+        if (editId) {
+          window.requestDeleteRecord(editId);
+        }
+      });
+
+      // リアルタイム給油単価プレビュー
+      const updatePreview = () => {
+        const fuel = parseFloat(document.getElementById('inputFuel').value);
+        const price = parseFloat(document.getElementById('inputPrice').value);
+        const el = document.getElementById('liveUnitPricePreview');
+        if (fuel > 0 && !Number.isNaN(price)) {
+          el.textContent = `推定給油単価: ${Math.round(price / fuel).toLocaleString()} 円/L`;
+        } else {
+          el.textContent = '推定給油単価: - 円/L';
+        }
+      };
+      document.getElementById('inputFuel').addEventListener('input', updatePreview);
+      document.getElementById('inputPrice').addEventListener('input', updatePreview);
+
+      // フォーム送信（新規追加または更新）
+      document.getElementById('recordForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        handleFormSubmit();
+      });
+
+      // メニューモーダル
+      document.getElementById('openMenuBtn').addEventListener('click', () => {
+        document.getElementById('vehicleNameInput').value = state.vehicleName || DEFAULT_VEHICLE_NAME;
+        document.getElementById('menuModal').classList.remove('hidden');
+      });
+      document.getElementById('closeMenuBtn').addEventListener('click', () => {
+        document.getElementById('menuModal').classList.add('hidden');
+      });
+      document.getElementById('menuModal').addEventListener('click', (e) => {
+        if (e.target.id === 'menuModal') {
+          document.getElementById('menuModal').classList.add('hidden');
+        }
+      });
+
+      // 車両・アプリ名称の保存
+      document.getElementById('saveVehicleNameBtn').addEventListener('click', () => {
+        const rawVal = document.getElementById('vehicleNameInput').value;
+        saveVehicleName(rawVal);
+        showToast(`名称を「${state.vehicleName}」に更新しました`);
+      });
+
+      // CSV出力
+      document.getElementById('exportCsvBtn').addEventListener('click', exportRecordsCsv);
+
+      // 初期サンプルデータ復元
+      document.getElementById('resetSampleBtn').addEventListener('click', () => {
+        document.getElementById('menuModal').classList.add('hidden');
+        openConfirmModal({
+          title: '初期サンプルデータの復元',
+          message: '現在の記録を初期サンプルデータ（ARKANA記録簿）で上書き復元しますか？',
+          okText: '復元する',
+          okClass: 'bg-slate-900 hover:bg-slate-800 text-white',
+          onConfirm: () => {
+            state.records = [...INITIAL_RECORDS];
+            saveRecords();
+            prepareNewForm();
+            renderAll();
+            showToast('初期サンプルデータを復元しました');
+          }
+        });
+      });
+
+      // アンインストール（データ・キャッシュ完全消去）
+      document.getElementById('uninstallBtn').addEventListener('click', () => {
+        document.getElementById('menuModal').classList.add('hidden');
+        openConfirmModal({
+          title: 'アンインストール確認',
+          message: '端末内のすべての記録データ、設定名称、セッション情報、オフラインキャッシュ、Service Workerを完全に消去します。\nこの操作は取り消せません。実行しますか？',
+          okText: '完全消去を実行',
+          okClass: 'bg-rose-600 hover:bg-rose-700 text-white',
+          onConfirm: performFullUninstall
+        });
+      });
+    }
+
+    function prepareNewForm() {
+      document.getElementById('editRecordId').value = '';
+      document.getElementById('selectEditDate').value = '';
+      document.getElementById('switchToNewBtn').classList.add('hidden');
+      document.getElementById('deleteEditingRecordBtn').classList.add('hidden');
+      document.getElementById('formModeTitle').textContent = '新規記録の入力';
+      document.getElementById('editingBadge').classList.add('hidden');
+      document.getElementById('submitRecordBtn').textContent = '本体に保存する';
+      document.getElementById('inputDate').value = '';
+      document.getElementById('inputOdometer').value = '';
+      document.getElementById('inputFuel').value = '';
+      document.getElementById('inputPrice').value = '';
+      document.getElementById('inputMemo').value = '';
+      document.getElementById('inputMaintCost').value = '';
+      document.getElementById('liveUnitPricePreview').textContent = '推定給油単価: - 円/L';
+      setDefaultFormDate();
+
+      const { rows } = computeCalculatedRecords(state.records);
+      if (rows.length > 0) {
+        document.getElementById('inputOdometer').placeholder = `前回: ${fmt1(rows[rows.length - 1].odometer)} km`;
+      } else {
+        document.getElementById('inputOdometer').placeholder = '例: 25845.0';
+      }
+    }
+
+    window.startEditRecord = function(id) {
+      const target = state.records.find(r => r.id === id);
+      if (!target) return;
+
+      state.activeTab = 'input';
+      renderAll();
+
+      document.getElementById('editRecordId').value = target.id;
+      document.getElementById('selectEditDate').value = target.id;
+      document.getElementById('switchToNewBtn').classList.remove('hidden');
+      document.getElementById('deleteEditingRecordBtn').classList.remove('hidden');
+      document.getElementById('formModeTitle').textContent = '既存記録の修正';
+      document.getElementById('editingBadge').classList.remove('hidden');
+      document.getElementById('submitRecordBtn').textContent = '変更を上書き保存する';
+
+      document.getElementById('inputDate').value = target.date;
+      document.getElementById('inputOdometer').value = target.odometer;
+      document.getElementById('inputFuel').value = target.fuel;
+      document.getElementById('inputPrice').value = target.price;
+      document.getElementById('inputMemo').value = target.memo || '';
+      document.getElementById('inputMaintCost').value = target.maintCost || '';
+
+      const fuel = parseFloat(target.fuel);
+      const price = parseFloat(target.price);
+      document.getElementById('liveUnitPricePreview').textContent =
+        fuel > 0 ? `推定給油単価: ${Math.round(price / fuel).toLocaleString()} 円/L` : '推定給油単価: - 円/L';
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.requestDeleteRecord = function(id) {
+      const target = state.records.find(r => r.id === id);
+      if (!target) return;
+
+      openConfirmModal({
+        title: '記録の削除',
+        message: `${target.date.replace(/-/g, '/')}（${fmt1(target.odometer)} km）の記録を削除しますか？`,
+        okText: '削除する',
+        okClass: 'bg-rose-600 hover:bg-rose-700 text-white',
+        onConfirm: () => {
+          state.records = state.records.filter(r => r.id !== id);
+          saveRecords();
+          if (document.getElementById('editRecordId').value === id) {
+            prepareNewForm();
+          }
+          renderAll();
+          showToast('記録を削除しました');
+        }
+      });
+    };
+
+    function handleFormSubmit() {
+      const editId = document.getElementById('editRecordId').value;
+      const dateVal = document.getElementById('inputDate').value;
+      const odoVal = parseFloat(document.getElementById('inputOdometer').value);
+      const fuelVal = parseFloat(document.getElementById('inputFuel').value);
+      const priceVal = parseInt(document.getElementById('inputPrice').value, 10);
+      const memoVal = document.getElementById('inputMemo').value.trim();
+      const maintCostVal = parseInt(document.getElementById('inputMaintCost').value, 10) || 0;
+
+      if (!dateVal || Number.isNaN(odoVal) || Number.isNaN(fuelVal) || fuelVal <= 0 || Number.isNaN(priceVal)) {
+        showToast('入力内容を確認してください');
+        return;
+      }
+
+      if (editId) {
+        const idx = state.records.findIndex(r => r.id === editId);
+        if (idx !== -1) {
+          state.records[idx] = {
+            ...state.records[idx],
+            date: dateVal,
+            odometer: odoVal,
+            fuel: fuelVal,
+            price: priceVal,
+            memo: memoVal,
+            maintCost: maintCostVal
+          };
+          showToast('記録を上書き更新しました');
+        }
+      } else {
+        const newRecord = {
+          id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          date: dateVal,
+          odometer: odoVal,
+          fuel: fuelVal,
+          price: priceVal,
+          memo: memoVal,
+          maintCost: maintCostVal
+        };
+        state.records.push(newRecord);
+        showToast('端末内に保存しました');
+      }
+
+      saveRecords();
+      prepareNewForm();
+      state.activeTab = 'latest';
+      renderAll();
+    }
+
+    // =========================================================================
+    // アンインストール（データ・キャッシュ完全消去） & CSVエクスポート
+    // =========================================================================
+    async function performFullUninstall() {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+
+        state.records = [];
+        state.vehicleName = DEFAULT_VEHICLE_NAME;
+        applyVehicleNameUI();
+        prepareNewForm();
+        state.activeTab = 'latest';
+        renderAll();
+
+        openConfirmModal({
+          title: '完全消去が完了しました',
+          message: 'アプリ内の保存データ・設定・キャッシュをすべて削除しました。\n\nホーム画面にアイコンを追加している場合は、iPad / iPhone のホーム画面でアイコンを長押しし、「ブックマークを削除」を選択してください。',
+          okText: '閉じる',
+          okClass: 'bg-slate-900 hover:bg-slate-800 text-white',
+          hideCancel: true,
+          onConfirm: () => {}
+        });
+      } catch (err) {
+        console.error('Uninstall error:', err);
+        showToast('消去処理中に一部エラーが発生しました');
+      }
+    }
+
+    function exportRecordsCsv() {
+      const { rows } = computeCalculatedRecords(state.records);
+      const headers = [
+        '給油日', '累計km', '今回給油', '給油金額', '走行km',
+        '今回燃費', '3ヶ月燃費', '累計給油', '累計燃費', '給油単価',
+        '累計金額', 'メンテナンスMEMO', '整備費用'
+      ];
+
+      const lines = [headers.join(',')];
+      rows.forEach(r => {
+        const cols = [
+          r.date.replace(/-/g, '/'),
+          fmt1(r.odometer),
+          fmt1(r.fuel),
+          r.price,
+          r.tripKm !== null ? fmt1(r.tripKm) : '',
+          r.currentMpg !== null ? fmt1(r.currentMpg) : '',
+          r.threeMonthMpg !== null ? fmt1(r.threeMonthMpg) : '',
+          fmt1(r.cumulativeFuel),
+          r.cumulativeMpg !== null ? fmt1(r.cumulativeMpg) : '',
+          r.unitPrice || '',
+          r.cumulativePrice,
+          `"${String(r.memo || '').replace(/"/g, '""')}"`,
+          r.maintCost > 0 ? r.maintCost : ''
+        ];
+        lines.push(cols.join(','));
+      });
+
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const blob = new Blob([bom, lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeFilePrefix = (state.vehicleName || DEFAULT_VEHICLE_NAME).replace(/[\\/:*?"<>|]/g, '_');
+      a.href = url;
+      a.download = `${safeFilePrefix}_給油整備記録_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      document.getElementById('menuModal').classList.add('hidden');
+      showToast('CSVファイルを出力しました');
+    }
+
+    // =========================================================================
+    // UIヘルパー（カスタム確認モーダル・トースト・エスケープ）
+    // =========================================================================
+    let pendingConfirmAction = null;
+
+    function openConfirmModal({ title, message, okText, okClass, hideCancel = false, onConfirm }) {
+      document.getElementById('confirmTitle').textContent = title;
+      document.getElementById('confirmMessage').textContent = message;
+
+      const okBtn = document.getElementById('confirmOkBtn');
+      okBtn.textContent = okText || '実行する';
+      okBtn.className = `tap-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-bold cursor-pointer ${okClass || 'bg-slate-900 hover:bg-slate-800 text-white'}`;
+
+      const cancelBtn = document.getElementById('confirmCancelBtn');
+      cancelBtn.classList.toggle('hidden', Boolean(hideCancel));
+
+      pendingConfirmAction = onConfirm;
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+      pendingConfirmAction = null;
+      document.getElementById('confirmModal').classList.add('hidden');
+    });
+
+    document.getElementById('confirmOkBtn').addEventListener('click', () => {
+      const action = pendingConfirmAction;
+      pendingConfirmAction = null;
+      document.getElementById('confirmModal').classList.add('hidden');
+      if (typeof action === 'function') action();
+    });
+
+    let toastTimer = null;
+    function showToast(message) {
+      const banner = document.getElementById('toastBanner');
+      const content = document.getElementById('toastContent');
+      content.textContent = message;
+      banner.classList.remove('hidden');
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 2400);
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[m]));
+    }
+  </script>
+</body>
+</html>
